@@ -8,6 +8,7 @@ from google.cloud import speech_v1 as speech
 
 import audio
 from voiceflow import Voiceflow
+from gptflow import GptFlow
 
 RATE = 16000
 language_code = "en-US"  # a BCP-47 language tag
@@ -23,11 +24,11 @@ def main():
     config = load_config()
 
     # Wakeword setup
-    porcupine = pvporcupine.create(keywords=config["wakewords"])
+    porcupine = pvporcupine.create(config["porcupine_access_key"], keywords=config["wakewords"])
     CHUNK = porcupine.frame_length  # 512 entries
 
     # Voiceflow setup
-    vf = Voiceflow(os.getenv('VF_API_KEY', "dummy_key"), config["vf_VersionID"])
+    vf = GptFlow(config["openai_key"])
 
     # Google ASR setup
     google_asr_client = speech.SpeechClient()
@@ -54,28 +55,25 @@ def main():
                 print("Wakeword Detected")
                 audio.beep()
                 end = False
-                while not end: 
-                    if vf.state_uninitialized(): 
-                        # First session
-                        print("Initializing first session")
-                        response = vf.init_state()
-                    else:
-                        stream.start_buf()  # Only start the stream buffer when we detect the wakeword
-                        audio_generator = stream.generator()
-                        requests = (
-                            speech.StreamingRecognizeRequest(audio_content=content)
-                            for content in audio_generator
-                        )
+                while not end:
+                    stream.start_buf()  # Only start the stream buffer when we detect the wakeword
+                    audio_generator = stream.generator()
+                    requests = (
+                        speech.StreamingRecognizeRequest(audio_content=content)
+                        for content in audio_generator
+                    )
 
-                        responses = google_asr_client.streaming_recognize(streaming_config, requests)
+                    responses = google_asr_client.streaming_recognize(streaming_config, requests)
+                    print(responses)
 
-                        # Now, put the transcription responses to use.
-                        utterance = audio.process(responses)
-                        stream.stop_buf()
+                    # Now, put the transcription responses to use.
+                    utterance = audio.process(responses)
+                    stream.stop_buf()
 
-                        # Send request to VF service and get response
-                        response = vf.interact(utterance)
-                    
+                    # Send request to VF service and get response
+                    response = vf.interact(utterance)
+                    continue
+
                     for item in response["trace"]:
                         if item["type"] == "speak":
                             payload = item["payload"]
