@@ -127,4 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Local memories
+gpt3_logs/*
+internal_notes/*
+nexus/*
 config.yaml

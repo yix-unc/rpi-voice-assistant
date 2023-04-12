@@ -1,0 +1,4 @@
+Summarize key points of following concersations concisely:
+<<INPUT>>
+
+Below is the rewrite:

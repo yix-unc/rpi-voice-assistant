@@ -2,6 +2,7 @@ from gtts import gTTS
 import pyaudio
 import queue
 import base64
+import time
 import os
 
 SYS_BEEP_PATH = os.path.join(os.getcwd(),"assets/beepbeep.wav")
@@ -122,10 +123,14 @@ def play(encoding_str):
 
 # Text-to-speech using Google TTS
 def speak(text):
+    start = time.time()
     tts = gTTS(text=text, lang='en')
     filename = '/tmp/tts.mp3'
+    print("gtts time {}".format(time.time() - start))
     tts.save(filename)
-    mp3_play(filename)
+    print("save file time {}".format(time.time() - start))
+    speech_play(filename)
+    print("speech play time {}".format(time.time() - start))
 
 def beep():
     wav_play(SYS_BEEP_PATH)
@@ -138,3 +143,6 @@ def mp3_play(filename):
 
 def wav_play(filename):
     os.system('aplay ' + filename + '>/dev/null 2>&1')
+
+def speech_play(filename):
+    os.system('ffplay -autoexit ' + filename + '>/dev/null 2>&1')

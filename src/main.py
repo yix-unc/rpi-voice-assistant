@@ -6,6 +6,9 @@ import yaml
 import pvporcupine
 from google.cloud import speech_v1 as speech
 
+from queue import Queue
+from threading import Thread
+
 import audio
 from voiceflow import Voiceflow
 from gptflow import GptFlow
@@ -41,9 +44,27 @@ def main():
         config=google_asr_config, interim_results=True
     )
 
+    gap_filling_sentences = vf.thinking_words()
+
+    speaker_queue = Queue(maxsize=0)
+    def process_speaker_queue(q):
+        while True:
+            text = q.get()
+            start = time.time()
+            audio.speak(text)
+            q.task_done()
+    speaker_worker = Thread(target=process_speaker_queue, args=(speaker_queue,))
+    speaker_worker.setDaemon(True)
+    speaker_worker.start()
+    
+    gap_filling_sentences_id = 0
     with audio.MicrophoneStream(RATE, CHUNK) as stream:
         print("Starting voice assistant!")
         while True:
+            if gap_filling_sentences_id >= len(gap_filling_sentences):
+                gap_filling_sentences = vf.thinking_words()
+                gap_filling_sentences_id = 0
+
             pcm = stream.get_sync_frame()
             if len(pcm) == 0:
                 # Protects against empty frames
@@ -62,16 +83,23 @@ def main():
                         speech.StreamingRecognizeRequest(audio_content=content)
                         for content in audio_generator
                     )
+                    start = time.time()
 
                     responses = google_asr_client.streaming_recognize(streaming_config, requests)
+                    print("voice recognition time {}".format(time.time() - start))
                     print(responses)
-
                     # Now, put the transcription responses to use.
                     utterance = audio.process(responses)
                     stream.stop_buf()
 
+                    print("process voice response time {}".format(time.time() - start))
+                    speaker_queue.put(gap_filling_sentences[gap_filling_sentences_id])
+                    gap_filling_sentences_id += 1
+                    
                     # Send request to VF service and get response
                     response = vf.interact(utterance)
+                    print("get gpt response time {}".format(time.time() - start))
+                    speaker_queue.put(response)
                     continue
 
                     for item in response["trace"]:
@@ -85,6 +113,7 @@ def main():
                             vf.clear_state()
                             end = True
                             audio.beep()
+    speaker_worker.join()
 
 if __name__ == "__main__":
     main()
